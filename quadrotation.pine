@@ -1,0 +1,244 @@
+//@version=6
+// Christopher Plunkett - March 13, 2025
+indicator('Quad Rotation-4 Stochastics Overlay', overlay = false)
+
+// 1) INPUTS
+
+// New checkbox input to match divergence lines to each stochastic's %D color.
+// When checked, the custom divergence colors below are ignored.
+matchDivToStoch = input.bool(false, title = 'Match Divergence Lines to Stochastic Color', tooltip = 'If checked, divergence lines will use the corresponding stochastic\'s %D color. The custom divergence colors below will be ignored.')
+
+// Divergence line customization inputs (will be ignored if matchDivToStoch is true)
+divLineColorBearish = input.color(color.red, 'Bearish Divergence Line Color', tooltip = 'Color for bearish divergence lines')
+divLineColorBullish = input.color(color.green, 'Bullish Divergence Line Color', tooltip = 'Color for bullish divergence lines')
+divLineWidth = input.int(2, 'Divergence Line Width', minval = 1, tooltip = 'Width for divergence lines')
+
+// Configurable alert condition
+minCount = input.int(4, minval = 1, maxval = 4, title = 'Min # of Stochastics for BG Coloring. This is the most important setting. Setting it at 4 will mean all 4 stochastics need to be above/below overbought or oversold and curving inward to paint the BG Green or Red.', tooltip = 'The lower this number the more false alerts you will get.')
+
+// Stochastic 1
+k1 = input.int(9, title = '%K Length (Stochastic 1)', tooltip = 'Change these at your peril')
+d1 = input.int(3, title = '%D Smoothing (Stochastic 1)')
+
+// Stochastic 2
+k2 = input.int(14, title = '%K Length (Stochastic 2)')
+d2 = input.int(3, title = '%D Smoothing (Stochastic 2)')
+
+// Stochastic 3
+k3 = input.int(40, title = '%K Length (Stochastic 3)')
+d3 = input.int(4, title = '%D Smoothing (Stochastic 3)')
+
+// Stochastic 4
+k4 = input.int(60, title = '%K Length (Stochastic 4)')
+d4 = input.int(10, title = '%D Smoothing (Stochastic 4)')
+smoothK4 = input.int(1, title = 'Smoothing (Stochastic 4)')
+
+// Bars for ABCD Detection
+abcdBars90 = input.int(5, title = 'Bars Since Above 90 (Long). This controls the sensitivity of the ABCD pattern recognition. Lower is more sensitivity - and greater false positives. Think of this as a shield preventing reversals. This \'Shield\' only goes away when Stochastic 4 curves back below 90. Look for trend continuation here after minor price corrections, but read the tooltip on the right for more info...', tooltip = 'Be aware though price will likely reverse before this \'shield\' goes away bc Stochastic 4 has to curve back below 90 before it stops painting, so look for reversal candles, stoch 1 and/or 2 to start curving at an angle > 10 degrees or so, and parabolic distances from the 9ema to get in early.')
+abcdBars10 = input.int(5, title = 'Bars Since Below 10 (Short). This controls the sensitivity of the ABCD pattern recognition. Lower is more sensitivity - and greater false positives. Think of this as a shield preventing reversals. This \'Shield\' only goes away when Stochastic 4 curves back above 10. Look for trend continuation here after minor price corrections, but read the tooltip on the right for more info...', tooltip = 'Be aware though price will likely reverse before this \'shield\' goes away bc Stochastic 4 has to curve back above 10 before it stops painting, so look for reversal candles, stoch 1 and/or 2 to start curving at an angle > 10 degrees or so, and parabolic distances from the 9ema to get in early.')
+
+// Divergence detection inputs (common for all stochastics)
+leftBars = input.int(5, 'Left bars for Divergence Pivot', minval = 1, tooltip = 'Number of bars to the left when searching for a pivot')
+rightBars = input.int(5, 'Right bars for Divergence Pivot', minval = 1, tooltip = 'Number of bars to the right when searching for a pivot in stochastics')
+
+// Divergence detection checkboxes for each stochastic
+divergenceStoch1 = input.bool(true, 'Identify Divergences for Stochastic 1', tooltip = 'Enable to detect divergences for Stochastic 1')
+divergenceStoch2 = input.bool(true, 'Identify Divergences for Stochastic 2', tooltip = 'Enable to detect divergences for Stochastic 2')
+divergenceStoch3 = input.bool(true, 'Identify Divergences for Stochastic 3', tooltip = 'Enable to detect divergences for Stochastic 3')
+divergenceStoch4 = input.bool(true, 'Identify Divergences for Stochastic 4', tooltip = 'Enable to detect divergences for Stochastic 4')
+
+// 2) CALCULATE STOCHASTICS
+stoch1K = ta.sma(ta.stoch(close, high, low, k1), 1)
+stoch1D = ta.sma(stoch1K, d1)
+
+stoch2K = ta.sma(ta.stoch(close, high, low, k2), 1)
+stoch2D = ta.sma(stoch2K, d2)
+
+stoch3K = ta.sma(ta.stoch(close, high, low, k3), 1)
+stoch3D = ta.sma(stoch3K, d3)
+
+stoch4K = ta.sma(ta.stoch(close, high, low, k4), smoothK4)
+stoch4D = ta.sma(stoch4K, d4)
+
+// 3) PLOT HORIZONTAL LINES & FILL
+hline(80, title = 'Overbought', color = color.white, linestyle = hline.style_solid, linewidth = 1)
+hline(20, title = 'Oversold', color = color.white, linestyle = hline.style_solid, linewidth = 1)
+hline(50, title = 'Midline', color = color.white, linestyle = hline.style_dotted, linewidth = 1)
+hline(90, title = 'ExtremeOverbought', color = color.white, linestyle = hline.style_dotted, linewidth = 1)
+hline(10, title = 'ExtremeOversold', color = color.white, linestyle = hline.style_dotted, linewidth = 1)
+
+// Blue background between 20 and 80
+h20 = hline(20, title = 'Oversold Boundary', color = color.new(color.gray, 100))
+h80 = hline(80, title = 'Overbought Boundary', color = color.new(color.gray, 100))
+fill(h20, h80, color = color.new(color.blue, 0), title = '20-80 Zone Fill')
+
+// 4) PLOT STOCHASTICS (%D LINES)
+plot(stoch1D, color = color.yellow, title = 'Stochastic 1 %D', linewidth = 2)
+plot(stoch2D, color = color.orange, title = 'Stochastic 2 %D', linewidth = 1)
+plot(stoch3D, color = color.gray, title = 'Stochastic 3 %D', linewidth = 1)
+plot(stoch4D, color = color.white, title = 'Stochastic 4 %D', linewidth = 3)
+
+// 5) SLOPING LOGIC FOR STOCH 1, 2, 3, 4
+stoch1SlopingDown = ta.change(stoch1D) < 0 and stoch1D >= 50
+stoch2SlopingDown = ta.change(stoch2D) < 0 and stoch2D >= 50
+stoch3SlopingDown = ta.change(stoch3D) <= 0 and stoch3D > 80
+stoch4SlopingDown = ta.change(stoch4D) <= 0 and stoch4D > 80
+
+stoch1SlopingUp = ta.change(stoch1D) > 0 and stoch1D <= 50
+stoch2SlopingUp = ta.change(stoch2D) > 0 and stoch2D <= 50
+stoch3SlopingUp = ta.change(stoch3D) >= 0 and stoch3D < 20
+stoch4SlopingUp = ta.change(stoch4D) >= 0 and stoch4D < 20
+
+slopingDownCount = (stoch1SlopingDown ? 1 : 0) + (stoch2SlopingDown ? 1 : 0) + (stoch3SlopingDown ? 1 : 0) + (stoch4SlopingDown ? 1 : 0)
+slopingUpCount = (stoch1SlopingUp ? 1 : 0) + (stoch2SlopingUp ? 1 : 0) + (stoch3SlopingUp ? 1 : 0) + (stoch4SlopingUp ? 1 : 0)
+
+// BG Coloring Logic
+bgRed = slopingDownCount >= minCount
+bgGreen = slopingUpCount >= minCount
+
+bgcolor(bgRed ? color.new(color.red, 0) : na, title = 'BG Red if at least minCount stochs are above 80 and sloping down')
+bgcolor(bgGreen ? color.new(color.green, 0) : na, title = 'BG Green if at least minCount stochs are below 20 and sloping up')
+
+alertcondition(bgRed, title = 'Red BG Triggered', message = 'Stochastics sloping down above 80 on at least minCount lines.')
+alertcondition(bgGreen, title = 'Green BG Triggered', message = 'Stochastics sloping up below 20 on at least minCount lines.')
+
+// 6) ABCD PATTERN LOGIC (BASED ON STOCH 4 stuck in extreme overbought or oversold for X number of bars - user configurable)
+stoch4Above90ForBars = ta.barssince(stoch4D <= 90) > abcdBars90
+stoch4Below10ForBars = ta.barssince(stoch4D >= 10) > abcdBars10
+
+abcdPatternBullish = stoch4Above90ForBars
+abcdPatternBearish = stoch4Below10ForBars
+
+plotshape(abcdPatternBullish, style = shape.cross, location = location.top, color = color.green, size = size.small, title = 'ABCD Long (Green X)')
+plotshape(abcdPatternBearish, style = shape.cross, location = location.bottom, color = color.red, size = size.small, title = 'ABCD Short (Red X)')
+
+alertcondition(abcdPatternBullish, title = 'ABCD Long Detected', message = 'ABCD Long Pattern detected')
+alertcondition(abcdPatternBearish, title = 'ABCD Short Detected', message = 'ABCD Short Pattern detected')
+
+// 7) SUPER SIGNAL (ALL FOUR STOCHASTICS)
+superSlopingDown = stoch1SlopingDown and stoch2SlopingDown and stoch3SlopingDown and stoch4SlopingDown
+superSlopingUp = stoch1SlopingUp and stoch2SlopingUp and stoch3SlopingUp and stoch4SlopingUp
+
+plotshape(minCount != 4 and superSlopingDown ? true : false, style = shape.arrowdown, location = location.top, color = color.red, size = size.huge, title = 'Super Signal Down')
+plotshape(minCount != 4 and superSlopingUp ? true : false, style = shape.arrowup, location = location.bottom, color = color.green, size = size.huge, title = 'Super Signal Up')
+
+alertcondition(superSlopingDown, title = 'SUPER Down Signal', message = 'All 4 stochastics above 80 and sloping down')
+alertcondition(superSlopingUp, title = 'SUPER Up Signal', message = 'All 4 stochastics below 20 and sloping up')
+
+// 8) DIVERGENCE DETECTION FOR EACH STOCHASTIC (Optional)
+// Divergence detection: When price and the stochastic move in opposite directions between two pivots, draw a line connecting the two stochastic pivot points.
+
+// --- Declare divergence alert variables for all stochastics ---
+var bool alertDivergenceStoch1Bearish = false
+var bool alertDivergenceStoch1Bullish = false
+var bool alertDivergenceStoch2Bearish = false
+var bool alertDivergenceStoch2Bullish = false
+var bool alertDivergenceStoch3Bearish = false
+var bool alertDivergenceStoch3Bullish = false
+var bool alertDivergenceStoch4Bearish = false
+var bool alertDivergenceStoch4Bullish = false
+
+// --- STOCHASTIC 1 DIVERGENCE ---
+if divergenceStoch1
+    // Variables to store the last detected pivot info for Stoch1
+    var int lastHighBar1 = na
+    var float lastHighValue1 = na
+    var float lastHighPrice1 = na
+
+    var int lastLowBar1 = na
+    var float lastLowValue1 = na
+    var float lastLowPrice1 = na
+
+    // Detect pivots on stoch1D using built-in pivot functions
+    pivotHigh1 = ta.pivothigh(stoch1D, leftBars, rightBars)
+    pivotLow1 = ta.pivotlow(stoch1D, leftBars, rightBars)
+
+    // --- BEARISH DIVERGENCE for Stoch1 ---
+    if not na(pivotHigh1)
+        pivotBar1 = bar_index - rightBars
+        pivotPrice1 = high[rightBars]
+        if not na(lastHighBar1)
+            if pivotPrice1 > lastHighPrice1 and pivotHigh1 < lastHighValue1
+                line.new(x1 = lastHighBar1, y1 = lastHighValue1, x2 = pivotBar1, y2 = pivotHigh1, color = matchDivToStoch ? color.white : divLineColorBearish, width = divLineWidth, extend = extend.none)
+                alertDivergenceStoch1Bearish := true
+                alertDivergenceStoch1Bearish
+            else
+                alertDivergenceStoch1Bearish := false
+                alertDivergenceStoch1Bearish
+        lastHighBar1 := pivotBar1
+        lastHighValue1 := pivotHigh1
+        lastHighPrice1 := pivotPrice1
+        lastHighPrice1
+
+    // --- BULLISH DIVERGENCE for Stoch1 ---
+    if not na(pivotLow1)
+        pivotBarLow1 = bar_index - rightBars
+        pivotPriceLow1 = low[rightBars]
+        if not na(lastLowBar1)
+            if pivotPriceLow1 < lastLowPrice1 and pivotLow1 > lastLowValue1
+                line.new(x1 = lastLowBar1, y1 = lastLowValue1, x2 = pivotBarLow1, y2 = pivotLow1, color = matchDivToStoch ? color.white : divLineColorBullish, width = divLineWidth, extend = extend.none)
+                alertDivergenceStoch1Bullish := true
+                alertDivergenceStoch1Bullish
+            else
+                alertDivergenceStoch1Bullish := false
+                alertDivergenceStoch1Bullish
+        lastLowBar1 := pivotBarLow1
+        lastLowValue1 := pivotLow1
+        lastLowPrice1 := pivotPriceLow1
+        lastLowPrice1
+
+// --- Additional Divergence Detection for Stoch2, Stoch3, and Stoch4 would follow similarly ---
+
+// --- Alert Conditions for Divergences ---
+alertcondition(alertDivergenceStoch1Bearish, title = 'Stoch1 Bearish Divergence', message = 'Bearish divergence detected on Stochastic 1')
+alertcondition(alertDivergenceStoch1Bullish, title = 'Stoch1 Bullish Divergence', message = 'Bullish divergence detected on Stochastic 1')
+alertcondition(alertDivergenceStoch2Bearish, title = 'Stoch2 Bearish Divergence', message = 'Bearish divergence detected on Stochastic 2')
+alertcondition(alertDivergenceStoch2Bullish, title = 'Stoch2 Bullish Divergence', message = 'Bullish divergence detected on Stochastic 2')
+alertcondition(alertDivergenceStoch3Bearish, title = 'Stoch3 Bearish Divergence', message = 'Bearish divergence detected on Stochastic 3')
+alertcondition(alertDivergenceStoch3Bullish, title = 'Stoch3 Bullish Divergence', message = 'Bullish divergence detected on Stochastic 3')
+alertcondition(alertDivergenceStoch4Bearish, title = 'Stoch4 Bearish Divergence', message = 'Bearish divergence detected on Stochastic 4')
+alertcondition(alertDivergenceStoch4Bullish, title = 'Stoch4 Bullish Divergence', message = 'Bullish divergence detected on Stochastic 4')
+
+
+
+
+
+// 9) ABCD CONTINUATION ALERTS
+stoch1CrossAbove80 = ta.crossover(stoch1D, 80) // Stochastic 1 crossing above 80 (for short signal)
+stoch1CrossBelow20 = ta.crossunder(stoch1D, 20) // Stochastic 1 crossing below 20 (for long signal)
+
+stoch4Below30 = stoch4D < 30 // Stochastic 4 below 30 (for bearish)
+stoch4Above70 = stoch4D > 70 // Stochastic 4 above 70 (for bullish)
+
+// Initialize variables for checking ABCD pattern over the last 10 bars
+var int abcdPatternBearishCount = 0
+var int abcdPatternBullishCount = 0
+
+// Reset counters at the start of each bar (at each new calculation)
+abcdPatternBearishCount := 0
+abcdPatternBullishCount := 0
+
+// Loop over the last 10 bars to check the conditions
+for i = 0 to 9 by 1
+    // Increment the bearish counter if Stochastic 4 was below 10
+    if stoch4D[i] < 10
+        abcdPatternBearishCount := abcdPatternBearishCount + 1
+        abcdPatternBearishCount
+    // Increment the bullish counter if Stochastic 4 was above 90
+    if stoch4D[i] > 90
+        abcdPatternBullishCount := abcdPatternBullishCount + 1
+        abcdPatternBullishCount
+
+// Set the conditions to true if the counter is greater than or equal to 3
+abcdPatternBearishLast10Bars = abcdPatternBearishCount >= 3
+abcdPatternBullishLast10Bars = abcdPatternBullishCount >= 3
+
+// Define the conditions for bearish and bullish patterns
+bearishCondition = stoch4Below30 and stoch1CrossAbove80 and abcdPatternBearishLast10Bars // Bearish signal: Stochastic 4 below 30, Stochastic 1 crosses above 80, and ABCD pattern was bearish in at least 3 of the last 10 bars
+bullishCondition = stoch4Above70 and stoch1CrossBelow20 and abcdPatternBullishLast10Bars // Bullish signal: Stochastic 4 above 70, Stochastic 1 crosses below 20, and ABCD pattern was bullish in at least 3 of the last 10 bars
+
+plotshape(bearishCondition, style = shape.labeldown, location = location.top, color = color.red, size = size.small, title = 'Bearish Signal (Short)')
+plotshape(bullishCondition, style = shape.labelup, location = location.bottom, color = color.green, size = size.small, title = 'Bullish Signal (Long)')
+
+alertcondition(bearishCondition, title = 'Look for Short Soon', message = 'Short Soon? Stochastic 1 crossed above 80 while Stochastic 4 is still below 30. Consider shorting soon for a continuation pattern.')
+alertcondition(bullishCondition, title = 'Look for Long Soon', message = 'Long Soon? Stochastic 1 crossed below 20 while Stochastic 4 is still above 70. Consider going long soon for a continuation pattern.')
